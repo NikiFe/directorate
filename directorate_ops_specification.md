@@ -1,4 +1,3 @@
-```markdown
 # FILE: directorate_ops_specification.md  
 **Revision v2.0 — 2025-06-26**  
 
@@ -226,8 +225,3 @@ JWT\_SECRET=<random>
 * GridFS for file attachments.  
 * Scheduled credit decay or salary payout cron.  
 * Analytical dashboard for economy trends and credit distribution.  
-
----
-
-**End of Specification v2.0 — includes Controller Niki, social-credit system, and economy.**
-```
