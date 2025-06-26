@@ -7,37 +7,50 @@
 </head>
 <body>
     <header>
-        <div>
-            User ID: <input type="text" id="userId" placeholder="ObjectId">
-            <button id="set-user">Set</button>
+        <div class="container">
+            <div class="user-set">
+                <label>User ID:</label>
+                <input type="text" id="userId" placeholder="ObjectId">
+                <button id="set-user">Set</button>
+            </div>
+            <div id="wallet" class="wallet"></div>
         </div>
-        <div id="wallet"></div>
     </header>
     <nav>
-        <button data-page="tickets">Tickets</button>
-        <button data-page="ledger">Ledger</button>
+        <div class="container">
+            <button data-page="tickets">Tickets</button>
+            <button data-page="ledger">Ledger</button>
+            <button data-page="notifications">Notifications</button>
+        </div>
     </nav>
     <main>
         <section id="tickets" class="page">
             <h2>Create Ticket</h2>
-            <form id="ticket-form">
-                <input name="title" placeholder="Title"><br>
-                <textarea name="body" placeholder="Description"></textarea><br>
-                <input name="category" placeholder="Category"><br>
-                <input name="subcategory" placeholder="Subcategory"><br>
-                <input name="reward_credits" placeholder="Reward Credits" type="number"><br>
-                <input name="reward_pay" placeholder="Reward Pay" type="number" step="0.01"><br>
+            <form id="ticket-form" class="panel">
+                <input name="title" placeholder="Title">
+                <textarea name="body" placeholder="Description"></textarea>
+                <input name="category" placeholder="Category">
+                <input name="subcategory" placeholder="Subcategory">
+                <div class="flex">
+                    <input name="reward_credits" placeholder="Reward Credits" type="number">
+                    <input name="reward_pay" placeholder="Reward Pay" type="number" step="0.01">
+                </div>
                 <button type="submit">Submit Ticket</button>
             </form>
+            <div id="ticket-result" class="panel"></div>
         </section>
         <section id="ledger" class="page" style="display:none">
             <h2>Ledger</h2>
-            <table>
+            <table class="panel">
                 <thead>
                     <tr><th>Time</th><th>Type</th><th>Credits</th><th>Pay</th></tr>
                 </thead>
                 <tbody id="ledger-body"></tbody>
             </table>
+        </section>
+        <section id="notifications" class="page" style="display:none">
+            <h2>Notifications</h2>
+            <ul id="notif-list" class="panel"></ul>
         </section>
     </main>
     <script src="app.js"></script>

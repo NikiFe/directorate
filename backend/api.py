@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.websockets import WebSocket
 from fastapi.staticfiles import StaticFiles
@@ -177,3 +177,27 @@ def approve_ticket(ticket_id: str, credits: int = 0, pay: float = 0.0):
 def list_transactions(user_id: str):
     docs = list(db.transactions.find({"user_id": PyObjectId(user_id)}))
     return [Transaction(**d) for d in docs]
+
+# Ticket comments
+@app.post("/tickets/{ticket_id}/comment", response_model=Ticket)
+def comment_ticket(ticket_id: str, body: str = Body(...), author_id: str = Body(...)):
+    ticket = db.tickets.find_one({"_id": PyObjectId(ticket_id)})
+    if not ticket:
+        raise HTTPException(status_code=404)
+    comment = {"author_id": PyObjectId(author_id), "body": body, "ts": datetime.utcnow()}
+    db.tickets.update_one({"_id": PyObjectId(ticket_id)}, {"$push": {"comments": comment}})
+    return Ticket(**db.tickets.find_one({"_id": PyObjectId(ticket_id)}))
+
+# Notifications endpoints
+@app.get("/notifications", response_model=List[Notification])
+def list_notifications(user_id: str):
+    docs = list(db.notifications.find({"user_id": PyObjectId(user_id)}).sort("ts", -1))
+    return [Notification(**d) for d in docs]
+
+@app.post("/notifications", response_model=Notification)
+def create_notification(notification: Notification):
+    data = notification.dict(by_alias=True)
+    res = db.notifications.insert_one(data)
+    data["_id"] = res.inserted_id
+    asyncio.create_task(broadcast_event("notify", {"user_id": str(data["user_id"]), "message": data["message"]}))
+    return Notification(**data)

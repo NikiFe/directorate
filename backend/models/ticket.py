@@ -17,6 +17,7 @@ class Ticket(BaseModel):
     assignee_id: PyObjectId
     target_rank: str
     watchers: List[PyObjectId] = []
+    comments: List[Dict] = []
     reward_credits: int = 0
     reward_pay: float = 0.0
     approval_log: List[Dict] = []

@@ -2,35 +2,81 @@ body {
     margin: 0;
     background: #111;
     color: #eee;
-    font-family: Arial, sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
+
+.container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
 header {
-    background: #222;
-    padding: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    background: #1b1b1b;
+    padding: 15px 0;
 }
+
+.user-set label {
+    margin-right: 5px;
+}
+
 nav {
-    background: #333;
-    padding: 5px;
+    background: #292929;
+    padding: 10px 0;
 }
+
 nav button {
     margin-right: 10px;
     background: #444;
     color: #eee;
     border: none;
-    padding: 5px 10px;
+    padding: 8px 16px;
+    cursor: pointer;
 }
+
+nav button:hover {
+    background: #555;
+}
+
 .page {
-    padding: 10px;
+    padding: 20px 0;
 }
+
+.panel {
+    background: #1a1a1a;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    margin-bottom: 20px;
+}
+
+.flex {
+    display: flex;
+    gap: 10px;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
 }
+
 th, td {
     border: 1px solid #444;
-    padding: 4px;
+    padding: 6px 8px;
     text-align: left;
+}
+
+.wallet {
+    text-align: right;
+    font-weight: bold;
+}
+
+#notif-list {
+    list-style: none;
+    padding: 0;
+}
+
+#notif-list li {
+    padding: 6px 0;
+    border-bottom: 1px solid #333;
 }

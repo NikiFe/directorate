@@ -4,11 +4,14 @@ const setUserBtn = document.getElementById('set-user');
 const walletDiv = document.getElementById('wallet');
 const ledgerBody = document.getElementById('ledger-body');
 const ticketForm = document.getElementById('ticket-form');
+const notifList = document.getElementById('notif-list');
+const ticketResult = document.getElementById('ticket-result');
 
 if (userId) {
   userInput.value = userId;
   loadWallet();
   loadLedger();
+  loadNotifications();
   initWS();
 }
 
@@ -17,6 +20,7 @@ setUserBtn.addEventListener('click', () => {
   localStorage.setItem('userId', userId);
   loadWallet();
   loadLedger();
+  loadNotifications();
   initWS();
 });
 
@@ -41,14 +45,32 @@ function loadLedger() {
     });
 }
 
+function loadNotifications() {
+  fetch(`/notifications?user_id=${userId}`)
+    .then(r => r.json())
+    .then(list => {
+      notifList.innerHTML = '';
+      list.forEach(n => {
+        const li = document.createElement('li');
+        li.textContent = `${new Date(n.ts).toLocaleString()} - ${n.message}`;
+        notifList.appendChild(li);
+      });
+    });
+}
+
 function initWS() {
   if (!userId) return;
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.onmessage = evt => {
     const msg = JSON.parse(evt.data);
     if (msg.payload.user_id === userId) {
-      loadWallet();
-      loadLedger();
+      if (msg.event === 'credits_update' || msg.event === 'reward_granted') {
+        loadWallet();
+        loadLedger();
+      }
+      if (msg.event === 'notify') {
+        loadNotifications();
+      }
     }
   };
 }
@@ -75,6 +97,8 @@ ticketForm.addEventListener('submit', e => {
       fetch(`/tickets/${t._id}/submit`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(sub)})
         .then(() => {
           form.reset();
+          ticketResult.textContent = 'Ticket submitted.';
+          setTimeout(() => ticketResult.textContent = '', 3000);
         });
     });
 });
