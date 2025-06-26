@@ -1,12 +1,17 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.websockets import WebSocket
+from fastapi.staticfiles import StaticFiles
 from typing import List
+from datetime import datetime
+import asyncio
 
 from .db import db
 from .models import User, Ticket, Transaction, Notification, PyObjectId
 
 app = FastAPI(title="Directorate API")
+
+app.mount("/static", StaticFiles(directory="backend/static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,6 +23,25 @@ app.add_middleware(
 
 # Simplified in-memory connections for WebSockets
 connected_clients: List[WebSocket] = []
+
+# Rank hierarchy and base pay used for reward escalation logic
+RANKS = ["asset", "shadow", "marshal", "executor", "nyx", "niki"]
+BASE_PAY = {
+    "asset": 3.0,
+    "shadow": 4.5,
+    "marshal": 6.0,
+    "executor": 8.0,
+    "nyx": 0.0,
+    "niki": 0.0,
+}
+
+
+def next_rank(rank: str) -> str:
+    try:
+        idx = RANKS.index(rank)
+    except ValueError:
+        return rank
+    return RANKS[idx + 1] if idx + 1 < len(RANKS) else rank
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
@@ -33,9 +57,12 @@ async def websocket_endpoint(ws: WebSocket):
 
 # Utility functions
 
-def broadcast_event(event: str, payload: dict):
+async def broadcast_event(event: str, payload: dict):
     for ws in connected_clients:
-        ws.send_json({"event": event, "payload": payload})
+        try:
+            await ws.send_json({"event": event, "payload": payload})
+        except Exception:
+            pass
 
 # Users CRUD (simplified)
 @app.post("/users", response_model=User)
@@ -52,6 +79,25 @@ def get_user(user_id: str):
         raise HTTPException(status_code=404)
     return User(**data)
 
+
+@app.patch("/users/{user_id}/adjust", response_model=User)
+def adjust_user(user_id: str, credits: int = 0, pay: float = 0.0):
+    db.users.update_one({"_id": PyObjectId(user_id)}, {"$inc": {"credits": credits, "balance": pay}})
+    db.transactions.insert_one(
+        {
+            "user_id": PyObjectId(user_id),
+            "type": "manual_adj",
+            "amount_cr": credits,
+            "amount_pay": pay,
+            "related_ticket": None,
+            "approved_by": None,
+            "ts": datetime.utcnow(),
+        }
+    )
+    user_data = db.users.find_one({"_id": PyObjectId(user_id)})
+    asyncio.create_task(broadcast_event("credits_update", {"user_id": user_id, "new_credits": user_data["credits"]}))
+    return User(**user_data)
+
 # Tickets
 @app.post("/tickets", response_model=Ticket)
 def create_ticket(ticket: Ticket):
@@ -63,25 +109,69 @@ def create_ticket(ticket: Ticket):
 @app.patch("/tickets/{ticket_id}/submit", response_model=Ticket)
 def submit_ticket(ticket_id: str, ticket: Ticket):
     data = ticket.dict(exclude_unset=True, by_alias=True)
+    data["status"] = "awaiting_review"
     db.tickets.update_one({"_id": PyObjectId(ticket_id)}, {"$set": data})
     new_data = db.tickets.find_one({"_id": PyObjectId(ticket_id)})
     return Ticket(**new_data)
 
 @app.patch("/tickets/{ticket_id}/approve", response_model=Ticket)
 def approve_ticket(ticket_id: str, credits: int = 0, pay: float = 0.0):
-    update = {"status": "closed", "reward_credits": credits, "reward_pay": pay}
+    ticket = db.tickets.find_one({"_id": PyObjectId(ticket_id)})
+    if not ticket:
+        raise HTTPException(status_code=404)
+
+    assignee = db.users.find_one({"_id": ticket["assignee_id"]})
+    base_pay = BASE_PAY.get(assignee.get("rank", "asset"), 0.0)
+
+    # Determine if escalation is required
+    if credits > 100 or pay > base_pay * 5:
+        next_target = next_rank(ticket.get("target_rank", assignee["rank"]))
+        db.tickets.update_one(
+            {"_id": PyObjectId(ticket_id)},
+            {"$set": {"status": "awaiting_review", "target_rank": next_target}},
+        )
+        return Ticket(**db.tickets.find_one({"_id": PyObjectId(ticket_id)}))
+
+    # Final approval path
+    update = {
+        "status": "closed",
+        "reward_credits": credits,
+        "reward_pay": pay,
+        "approval_log": ticket.get("approval_log", [])
+        + [{"approver_id": None, "credits": credits, "pay": pay, "ts": datetime.utcnow()}],
+    }
     db.tickets.update_one({"_id": PyObjectId(ticket_id)}, {"$set": update})
-    db.transactions.insert_one({
-        "user_id": db.tickets.find_one({"_id": PyObjectId(ticket_id)})["assignee_id"],
-        "type": "payment",
-        "amount_cr": credits,
-        "amount_pay": pay,
-        "related_ticket": PyObjectId(ticket_id),
-        "approved_by": None,
-    })
-    new_data = db.tickets.find_one({"_id": PyObjectId(ticket_id)})
-    broadcast_event("reward_granted", {"user_id": str(new_data["assignee_id"]), "credits": credits, "pay": pay, "ticket_id": ticket_id})
-    return Ticket(**new_data)
+
+    db.transactions.insert_one(
+        {
+            "user_id": ticket["assignee_id"],
+            "type": "payment",
+            "amount_cr": credits,
+            "amount_pay": pay,
+            "related_ticket": PyObjectId(ticket_id),
+            "approved_by": None,
+        }
+    )
+
+    db.users.update_one(
+        {"_id": ticket["assignee_id"]},
+        {"$inc": {"credits": credits, "balance": pay}},
+    )
+
+    new_user = db.users.find_one({"_id": ticket["assignee_id"]})
+    asyncio.create_task(
+        broadcast_event(
+            "reward_granted",
+            {"user_id": str(ticket["assignee_id"]), "credits": credits, "pay": pay, "ticket_id": ticket_id},
+        )
+    )
+    asyncio.create_task(
+        broadcast_event(
+            "credits_update", {"user_id": str(ticket["assignee_id"]), "new_credits": new_user["credits"]}
+        )
+    )
+
+    return Ticket(**db.tickets.find_one({"_id": PyObjectId(ticket_id)}))
 
 @app.get("/transactions", response_model=List[Transaction])
 def list_transactions(user_id: str):
